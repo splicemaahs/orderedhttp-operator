@@ -1,0 +1,226 @@
+diff --git a/pkg/controller/orderedhttp/orderedhttp_controller.go b/pkg/controller/orderedhttp/orderedhttp_controller.go
+index b67bd41..e948d0a 100644
+--- a/pkg/controller/orderedhttp/orderedhttp_controller.go
++++ b/pkg/controller/orderedhttp/orderedhttp_controller.go
+@@ -2,13 +2,15 @@ package orderedhttp
+
+ import (
+ 	"context"
++	"strconv"
+
+ 	orderedhttpv1alpha1 "github.com/splicemaahs/orderedhttp-operator/pkg/apis/orderedhttp/v1alpha1"
+ 	corev1 "k8s.io/api/core/v1"
+ 	"k8s.io/apimachinery/pkg/api/errors"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++	"k8s.io/apimachinery/pkg/labels"
+ 	"k8s.io/apimachinery/pkg/runtime"
+-	"k8s.io/apimachinery/pkg/types"
++	"k8s.io/apimachinery/pkg/util/intstr"
+ 	"sigs.k8s.io/controller-runtime/pkg/client"
+ 	"sigs.k8s.io/controller-runtime/pkg/controller"
+ 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+@@ -84,11 +86,11 @@ type ReconcileOrderedHttp struct {
+ // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
+ func (r *ReconcileOrderedHttp) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+ 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+-	reqLogger.Info("Reconciling OrderedHttp")
++	reqLogger.Info("1. Reconciling OrderedHttp")
+
+ 	// Fetch the OrderedHttp instance
+-	instance := &orderedhttpv1alpha1.OrderedHttp{}
+-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
++	orderedHttp := &orderedhttpv1alpha1.OrderedHttp{}
++	err := r.client.Get(context.TODO(), request.NamespacedName, orderedHttp)
+ 	if err != nil {
+ 		if errors.IsNotFound(err) {
+ 			// Request object not found, could have been deleted after reconcile request.
+@@ -100,52 +102,165 @@ func (r *ReconcileOrderedHttp) Reconcile(request reconcile.Request) (reconcile.R
+ 		return reconcile.Result{}, err
+ 	}
+
+-	// Define a new Pod object
+-	pod := newPodForCR(instance)
++	// List all pods owned by this OrderedHttp instance
++	lbls := labels.Set{
++		"app":     orderedHttp.Name,
++		"version": "0.1",
++	}
++	var allPodsReady bool
++	allPodsReady = true
++	existingPods := &corev1.PodList{}
++	err = r.client.List(context.TODO(),
++		&client.ListOptions{
++			Namespace:     request.Namespace,
++			LabelSelector: labels.SelectorFromSet(lbls),
++		},
++		existingPods)
++	if err != nil {
++		reqLogger.Error(err, "failed to list existing pods in the orderedHttp pod")
++		return reconcile.Result{}, err
++	}
++	existingPodNames := []string{}
++
++	// Count the pods that are pending or running as available
++	for _, pod := range existingPods.Items {
++		reqLogger.Info("1.1 Loop Pods", "PodName: ", pod.Name)
++		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
++			continue
++		}
++		reqLogger.Info("1.2 Pod Phase", "Phase: ", pod.Status.Phase)
++		if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
++			existingPodNames = append(existingPodNames, pod.GetObjectMeta().GetName())
++		}
++		if pod.Status.Phase != corev1.PodRunning {
++			allPodsReady = false
++		}
++		for _, containerStatus := range pod.Status.ContainerStatuses {
++			if containerStatus.Ready == false {
++				allPodsReady = false
++			}
++			reqLogger.Info("1.2.1 Container Statuses: ", "Ready: ", strconv.FormatBool(containerStatus.Ready), "All Pods Ready: ", strconv.FormatBool(allPodsReady))
++		}
++	}
++	reqLogger.Info("2. Checking orderedHttp", "expected size", orderedHttp.Spec.Replicas, "Pod.Names", existingPodNames)
++
++	// // Update the status if necessary
++	// status := orderedhttpv1alpha1.OrderedHttpStatus{
++	// 	PodNames: existingPodNames,
++	// }
++	// // reqLogger.Info("Direct Updating orderedHttp status")
++	// // orderedHttp.Status = status
++	// if !reflect.DeepEqual(orderedHttp.Status, status) {
++	// 	reqLogger.Info("Updating orderedHttp status")
++	// 	orderedHttp.Status = status
++	// 	err := r.client.Update(context.TODO(), orderedHttp)
++	// 	if err != nil {
++	// 		reqLogger.Error(err, "failed to update the orderedHttp pod")
++	// 		return reconcile.Result{}, err
++	// 	}
++	// }
+
+-	// Set OrderedHttp instance as the owner and controller
+-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
++	// List the pods for this deployment
++	// podList := &corev1.PodList{}
++	// podNames := getPodNames(podList.Items)
++	// orderedHttp.Status.PodNames = podNames
++	// reqLogger.Info("0. Setting Pod Names in status", "Pod.Names", existingPodNames)
++	orderedHttp.Status.PodNames = existingPodNames
++	err = r.client.Status().Update(context.TODO(), orderedHttp)
++	if err != nil {
++		reqLogger.Error(err, "failed to update the orderedHttp pod")
+ 		return reconcile.Result{}, err
+ 	}
++	// Update status.PodNames if needed
++	// if !reflect.DeepEqual(podNames, orderedHttp.Status.PodNames) {
++	// 	orderedHttp.Status.PodNames = podNames
++	// 	err := r.client.Update(context.TODO(), orderedHttp)
++	// 	if err != nil {
++	// 		// log.Printf("failed to update node status: %v", err)
++	// 		reqLogger.Error(err, "failed to update the orderedHttp pod")
++	// 		return reconcile.Result{}, err
++	// 	}
++	// }
+
+-	// Check if this Pod already exists
+-	found := &corev1.Pod{}
+-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
+-	if err != nil && errors.IsNotFound(err) {
+-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
+-		err = r.client.Create(context.TODO(), pod)
++	// Scale Down Pods
++	if int32(len(existingPodNames)) > orderedHttp.Spec.Replicas {
++		// When scaling down, just delete one, and allow the process to continue, the next loop will determine additional removals
++		reqLogger.Info("2.1 Deleting a pod in orderedHttp set", "expected size", orderedHttp.Spec.Replicas, "Pod.Names", existingPodNames)
++		pod := existingPods.Items[0]
++		err = r.client.Delete(context.TODO(), &pod)
+ 		if err != nil {
++			reqLogger.Error(err, "failed to delete a pod")
+ 			return reconcile.Result{}, err
+ 		}
++	}
+
+-		// Pod created successfully - don't requeue
+-		return reconcile.Result{}, nil
+-	} else if err != nil {
+-		return reconcile.Result{}, err
++	// Scale Up Pods
++	if int32(len(existingPodNames)) < orderedHttp.Spec.Replicas {
++		// When scaling up, just add one, and allow the process to contiue, the next loop will add more pods if needed.
++		reqLogger.Info("2.2 Pod Ready Check", "All Pods Ready: ", strconv.FormatBool(allPodsReady))
++		if allPodsReady == true {
++			reqLogger.Info("2.2.1 Adding a pod in orderedHttp set", "expected size", orderedHttp.Spec.Replicas, "Pod.Names", existingPodNames)
++			pod := newPodForCR(orderedHttp)
++			if err := controllerutil.SetControllerReference(orderedHttp, pod, r.scheme); err != nil {
++				reqLogger.Error(err, "unable to set owner reference on new pod")
++				return reconcile.Result{}, err
++			}
++			reqLogger.Info("2.2.2 Create Pod")
++			err = r.client.Create(context.TODO(), pod)
++			if err != nil {
++				reqLogger.Error(err, "failed to create a pod")
++				return reconcile.Result{}, err
++			}
++		}
+ 	}
++	return reconcile.Result{Requeue: true}, nil
+
+-	// Pod already exists - don't requeue
+-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
+-	return reconcile.Result{}, nil
++}
++
++// getPodNames returns the pod names of the array of pods passed in.
++func getPodNames(pods []corev1.Pod) []string {
++	var podNames []string
++	for _, pod := range pods {
++		podNames = append(podNames, pod.Name)
++	}
++	return podNames
+ }
+
+ // newPodForCR returns a busybox pod with the same name/namespace as the cr
+ func newPodForCR(cr *orderedhttpv1alpha1.OrderedHttp) *corev1.Pod {
+ 	labels := map[string]string{
+-		"app": cr.Name,
++		"app":     cr.Name,
++		"version": "0.1",
+ 	}
++
+ 	return &corev1.Pod{
+ 		ObjectMeta: metav1.ObjectMeta{
+-			Name:      cr.Name + "-pod",
+-			Namespace: cr.Namespace,
+-			Labels:    labels,
++			GenerateName: cr.Name + "-",
++			Namespace:    cr.Namespace,
++			Labels:       labels,
+ 		},
+ 		Spec: corev1.PodSpec{
+ 			Containers: []corev1.Container{
+ 				{
+-					Name:    "busybox",
+-					Image:   "busybox",
+-					Command: []string{"sleep", "3600"},
++					Name:  "nginx-delay",
++					Image: "splicemaahs/nginx-delay:latest",
++					Ports: []corev1.ContainerPort{
++						{
++							ContainerPort: 80,
++						},
++					},
++					ReadinessProbe: &corev1.Probe{
++						Handler: corev1.Handler{
++							TCPSocket: &corev1.TCPSocketAction{
++								Port: intstr.IntOrString{
++									Type:   intstr.Int,
++									IntVal: 80,
++								},
++							},
++						},
++						InitialDelaySeconds: 5,
++						PeriodSeconds:       10,
++					},
+ 				},
+ 			},
+ 		},

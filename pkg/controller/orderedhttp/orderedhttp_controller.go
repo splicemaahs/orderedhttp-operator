@@ -161,11 +161,11 @@ func (r *ReconcileOrderedHttp) Reconcile(request reconcile.Request) (reconcile.R
 	// }
 
 	// List the pods for this deployment
-	podList := &corev1.PodList{}
-	podNames := getPodNames(podList.Items)
-	orderedHttp.Status.PodNames = podNames
+	// podList := &corev1.PodList{}
+	// podNames := getPodNames(podList.Items)
+	// orderedHttp.Status.PodNames = podNames
 	// reqLogger.Info("0. Setting Pod Names in status", "Pod.Names", existingPodNames)
-	// orderedHttp.Status.PodNames = existingPodNames
+	orderedHttp.Status.PodNames = existingPodNames
 	err = r.client.Status().Update(context.TODO(), orderedHttp)
 	if err != nil {
 		reqLogger.Error(err, "failed to update the orderedHttp pod")
