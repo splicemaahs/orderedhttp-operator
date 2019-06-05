@@ -1,0 +1,13 @@
+diff --git a/deploy/operator.yaml b/deploy/operator.yaml
+index c967785..bc61cb6 100644
+--- a/deploy/operator.yaml
++++ b/deploy/operator.yaml
+@@ -16,7 +16,7 @@ spec:
+       containers:
+         - name: orderedhttp-operator
+           # Replace this with the built image name
+-          image: REPLACE_IMAGE
++          image: splicemaahs/orderedhttp-operator:latest
+           command:
+           - orderedhttp-operator
+           imagePullPolicy: Always
