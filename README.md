@@ -163,15 +163,16 @@ git apply patches/controllercode.patch
 
 ```bash
 vi deploy/operator.yaml
-# change the 'splicemaahs' reference to your own docker ID
+# change the 'image: REPLACE_IMAGE' reference to 'image: YOURDOCKERID/orderedhttp-operator:latest'
 ```
 
 ### Build the operator docker image
 
 ```bash
 go mod vendor # <- you need only run this once, and can rebuild with the 'build' command
-operator-sdk build YOURDOCKERID/orderedhttp-operator:latest
 # this process will fail on go syntax errors as it builds the code as part of the docker image build.
+operator-sdk build YOURDOCKERID/orderedhttp-operator:latest
+# push our image to Docker Hub
 docker push YOURDOCKERID/orderedhttp-operator:latest
 ```
 
