@@ -7,6 +7,10 @@ Example k8s operator using operator-sdk
 The goal for this example is to demonstrate a method of launching PODs serially.  Waiting to launch
 additional PODs until the currently running POD has reached a **live** state.
 
+Clearly with a basic structure of this single docker image, the same functionality can be accomplished
+using Service and StatefulSet features.  This project is meant to be a learning tool to allow
+iteration and discovery.
+
 ## Requirements
 
 ```bash
