@@ -95,7 +95,11 @@ Logon to your Docker Hub and create yourself two repositories:
 
 ```bash
 mkdir -p nginx-delay
-curl TODO: pull nginx-delay folder from github
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/nginx-delay/Dockerfile -o nginx-delay/Dockerfile
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/nginx-delay/Makefile -o nginx-delay/Makefile
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/nginx-delay/hello-plain-text.conf -o nginx-delay/hello-plain-text.conf
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/nginx-delay/nginx-foreground -o nginx-delay/nginx-foreground
+chmod 755 nginx-delay/nginx-foreground
 cd nginx-delay
 vi Makefile
 # change the `splicemaahs` reference to YOUR docker id, so it will push to your newly created
@@ -127,7 +131,7 @@ Create this patch file, then apply to the current sources
 
 ```bash
 mkdir -p patches
-curl TODO: from repository
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/patches/apicode.patch -o patches/apicode.patch
 ```
 
 ```bash
@@ -147,7 +151,7 @@ operator-sdk add controller --api-version=orderedhttp.splicemachine.io/v1alpha1 
 
 ```bash
 mkdir -p patches
-curl TODO: from repository
+curl -s https://raw.githubusercontent.com/splicemaahs/orderedhttp-operator/master/patches/controllercode.patch -o patches/controllercode.patch
 ```
 
 ```bash
